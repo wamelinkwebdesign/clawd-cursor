@@ -2,7 +2,6 @@
   "name": "clawd-cursor",
   "version": "0.1.0",
   "description": "AI Desktop Agent over VNC — your AI connects to your desktop like a remote user",
-  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

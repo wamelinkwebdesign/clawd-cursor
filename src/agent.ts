@@ -9,11 +9,11 @@
  * 5. Repeats until done or error
  */
 
-import { VNCClient } from './vnc-client.js';
-import { AIBrain } from './ai-brain.js';
-import { SafetyLayer } from './safety.js';
-import { SafetyTier } from './types.js';
-import type { ClawdConfig, AgentState, TaskResult, StepResult, InputAction } from './types.js';
+import { VNCClient } from './vnc-client';
+import { AIBrain } from './ai-brain';
+import { SafetyLayer } from './safety';
+import { SafetyTier } from './types';
+import type { ClawdConfig, AgentState, TaskResult, StepResult, InputAction } from './types';
 
 const MAX_STEPS = 50;  // Safety limit per task
 
@@ -212,3 +212,4 @@ function tierEmoji(tier: SafetyTier): string {
     case SafetyTier.Confirm: return '🔴';
   }
 }
+

@@ -10,8 +10,8 @@
  */
 
 import express from 'express';
-import type { ClawdConfig } from './types.js';
-import { Agent } from './agent.js';
+import type { ClawdConfig } from './types';
+import { Agent } from './agent';
 
 export function createServer(agent: Agent, config: ClawdConfig): express.Express {
   const app = express();
@@ -81,3 +81,4 @@ export function createServer(agent: Agent, config: ClawdConfig): express.Express
 
   return app;
 }
+

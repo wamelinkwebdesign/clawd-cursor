@@ -8,7 +8,7 @@
 import { EventEmitter } from 'events';
 import { createConnection } from 'net';
 import sharp from 'sharp';
-import type { ClawdConfig, ScreenFrame, MouseAction, KeyboardAction } from './types.js';
+import type { ClawdConfig, ScreenFrame, MouseAction, KeyboardAction } from './types';
 
 // RFB key code mappings
 const KEY_MAP: Record<string, number> = {
@@ -311,3 +311,4 @@ export class VNCClient extends EventEmitter {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
+

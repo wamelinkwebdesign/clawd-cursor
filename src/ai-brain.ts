@@ -6,7 +6,7 @@
  * and decides what to do next to accomplish the task.
  */
 
-import type { ClawdConfig, InputAction, ScreenFrame, MouseAction, KeyboardAction } from './types.js';
+import type { ClawdConfig, InputAction, ScreenFrame, MouseAction, KeyboardAction } from './types';
 
 const SYSTEM_PROMPT = `You are Clawd Cursor, an AI desktop agent controlling a computer via VNC.
 You can see the screen and execute mouse/keyboard actions.
@@ -206,3 +206,4 @@ export class AIBrain {
     this.conversationHistory = [];
   }
 }
+

@@ -116,3 +116,4 @@ export const DEFAULT_CONFIG: ClawdConfig = {
     maxWidth: 1280,
   },
 };
+

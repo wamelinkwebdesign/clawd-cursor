@@ -3,8 +3,8 @@
  * and enforces confirmation/blocking rules.
  */
 
-import { SafetyTier } from './types.js';
-import type { ClawdConfig, InputAction } from './types.js';
+import { SafetyTier } from './types';
+import type { ClawdConfig, InputAction } from './types';
 
 export class SafetyLayer {
   private config: ClawdConfig;
@@ -92,3 +92,4 @@ export class SafetyLayer {
     };
   }
 }
+

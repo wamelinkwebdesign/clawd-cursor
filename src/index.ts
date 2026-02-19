@@ -7,10 +7,10 @@
  */
 
 import { Command } from 'commander';
-import { Agent } from './agent.js';
-import { createServer } from './server.js';
-import { DEFAULT_CONFIG } from './types.js';
-import type { ClawdConfig } from './types.js';
+import { Agent } from './agent';
+import { createServer } from './server';
+import { DEFAULT_CONFIG } from './types';
+import type { ClawdConfig } from './types';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -116,3 +116,4 @@ program
   });
 
 program.parse();
+
