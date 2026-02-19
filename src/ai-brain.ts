@@ -2,12 +2,20 @@
  * AI Brain — sends screenshots to a vision LLM and gets back
  * structured actions. Maintains conversation history so the AI
  * remembers what it saw and did.
+ *
+ * v2: Task Decomposition + Smart Screenshot
+ * - decomposeTask(): ONE LLM call to break task into subtasks
+ * - decideNextAction(): now accepts resized screenshots with scale factor
+ * - System prompt updated to tell AI about coordinate scaling
  */
 
 import type { ClawdConfig, InputAction, ActionSequence, ScreenFrame } from './types';
 
 const SYSTEM_PROMPT = `You are Clawd Cursor, an AI desktop agent controlling a Windows 11 computer via VNC.
-Screen resolution: {WIDTH}x{HEIGHT}. You see screenshots and execute mouse/keyboard actions.
+Real screen resolution: {REAL_WIDTH}x{REAL_HEIGHT}. Screenshot shown at: {LLM_WIDTH}x{LLM_HEIGHT} (scale factor: {SCALE}x).
+
+IMPORTANT: All coordinates you provide should be in the SCREENSHOT coordinate space ({LLM_WIDTH}x{LLM_HEIGHT}).
+The system will automatically scale them to real screen coordinates.
 
 WINDOWS 11 LAYOUT:
 - Taskbar at BOTTOM, icons CENTERED (not left-aligned)
@@ -18,7 +26,7 @@ WINDOWS 11 LAYOUT:
 RESPONSE FORMAT — respond with ONLY valid JSON, no other text:
 
 SINGLE ACTION (most cases):
-{"kind": "click", "x": 1280, "y": 1420, "description": "Click Start button in center of taskbar"}
+{"kind": "click", "x": 640, "y": 710, "description": "Click Start button in center of taskbar"}
 {"kind": "double_click", "x": 100, "y": 200, "description": "Open file"}
 {"kind": "type", "text": "hello", "description": "Type greeting"}
 {"kind": "key_press", "key": "Return", "description": "Press Enter"}
@@ -27,12 +35,9 @@ SINGLE ACTION (most cases):
 
 SEQUENCE (for predictable multi-step flows like filling forms):
 {"kind": "sequence", "description": "Fill email form", "steps": [
-  {"kind": "click", "x": 800, "y": 400, "description": "Click To field"},
+  {"kind": "click", "x": 400, "y": 200, "description": "Click To field"},
   {"kind": "type", "text": "user@email.com", "description": "Type recipient"},
-  {"kind": "key_press", "key": "Tab", "description": "Move to subject"},
-  {"kind": "type", "text": "Subject line", "description": "Type subject"},
-  {"kind": "key_press", "key": "Tab", "description": "Move to body"},
-  {"kind": "type", "text": "Message body", "description": "Type message"}
+  {"kind": "key_press", "key": "Tab", "description": "Move to subject"}
 ]}
 
 COMPLETION:
@@ -52,13 +57,35 @@ WAIT (for loading):
 CRITICAL RULES:
 1. BEFORE acting, check: has the task ALREADY BEEN COMPLETED based on previous steps? If yes → done
 2. ONE JSON response only. Use "sequence" for predictable multi-step flows
-3. EXACT pixel coordinates from the screenshot
+3. Coordinates should be in the SCREENSHOT space ({LLM_WIDTH}x{LLM_HEIGHT}), NOT real screen space
 4. NEVER repeat an action that was already performed in previous steps
 5. If you typed text and it appeared, that step is DONE — move to the next part of the task
 6. Track progress: if you've done steps A, B, C of a task, do step D next — don't restart
-7. Use sequences for form-filling (To, Subject, Body) to avoid re-screenshotting between each field
+7. Use sequences for form-filling to avoid re-screenshotting between each field
 8. PREFER accessibility actions (a11y_*) over pixel coordinates when the accessibility tree provides element info
 9. Accessibility actions are faster and more reliable than clicking coordinates`;
+
+const DECOMPOSE_SYSTEM_PROMPT = `You decompose desktop tasks into simple sub-tasks.
+Return ONLY a JSON array of strings. Each string is a simple, atomic action.
+
+Rules:
+- Each sub-task should be ONE simple action (open app, type text, click button, etc.)
+- Use natural language: "open Paint", "type hello world", "click File menu", "save the file"
+- Common patterns: "open [app]", "type [text]", "click [element]", "go to [url]", "press [key]"
+- Keep it minimal — don't add unnecessary steps
+
+Examples:
+Task: "Open Paint and type hello world"
+["open Paint", "type hello world"]
+
+Task: "Open Chrome, go to github.com, and search for clawd-cursor"
+["open Chrome", "go to github.com", "click the search box", "type clawd-cursor", "press enter"]
+
+Task: "Save the current document as PDF"
+["click File menu", "click Save As", "select PDF format", "click Save"]
+
+Task: "Type hello"
+["type hello"]`;
 
 interface ConversationTurn {
   role: 'user' | 'assistant';
@@ -70,7 +97,7 @@ export class AIBrain {
   private history: ConversationTurn[] = [];
   private screenWidth: number = 0;
   private screenHeight: number = 0;
-  private maxHistoryTurns = 5; // Keep last 5 exchanges
+  private maxHistoryTurns = 5;
 
   constructor(config: ClawdConfig) {
     this.config = config;
@@ -81,8 +108,36 @@ export class AIBrain {
     this.screenHeight = height;
   }
 
+  /**
+   * Decompose a complex task into simple sub-tasks via ONE LLM call.
+   * This is a text-only call (no screenshot) — fast and cheap.
+   */
+  async decomposeTask(task: string): Promise<string[]> {
+    try {
+      const response = await this.callLLMText(DECOMPOSE_SYSTEM_PROMPT, `Task: "${task}"`);
+      const match = response.match(/\[[\s\S]*\]/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((s: any) => typeof s === 'string')) {
+          return parsed;
+        }
+      }
+      // If parsing failed, return the whole task as a single subtask
+      console.warn(`⚠️ Failed to parse decomposition, using task as-is`);
+      return [task];
+    } catch (err) {
+      console.warn(`⚠️ Decomposition failed (${err}), using task as-is`);
+      return [task];
+    }
+  }
+
+  /**
+   * Ask the LLM what to do next, using a RESIZED screenshot.
+   * Coordinates in the response are in LLM-image space and will be
+   * scaled back to real screen coordinates by the caller.
+   */
   async decideNextAction(
-    screenshot: ScreenFrame,
+    screenshot: ScreenFrame & { scaleFactor?: number; llmWidth?: number; llmHeight?: number },
     task: string,
     previousSteps: string[] = [],
     accessibilityContext?: string,
@@ -136,10 +191,17 @@ export class AIBrain {
     // Add to history
     this.history.push(userTurn);
 
-    // Call the LLM with full conversation history
+    // Build system prompt with resolution info
+    const llmWidth = screenshot.llmWidth || screenshot.width;
+    const llmHeight = screenshot.llmHeight || screenshot.height;
+    const scale = screenshot.scaleFactor || 1;
+
     const systemPrompt = SYSTEM_PROMPT
-      .replace('{WIDTH}', String(this.screenWidth))
-      .replace('{HEIGHT}', String(this.screenHeight));
+      .replace(/{REAL_WIDTH}/g, String(this.screenWidth))
+      .replace(/{REAL_HEIGHT}/g, String(this.screenHeight))
+      .replace(/{LLM_WIDTH}/g, String(llmWidth))
+      .replace(/{LLM_HEIGHT}/g, String(llmHeight))
+      .replace(/{SCALE}/g, scale.toFixed(2));
 
     const response = await this.callLLM(systemPrompt);
 
@@ -149,17 +211,17 @@ export class AIBrain {
       content: [{ type: 'text', text: response }],
     });
 
-    // Trim history to max turns (each turn = user + assistant = 2 entries)
+    // Trim history
     while (this.history.length > this.maxHistoryTurns * 2) {
       this.history.shift();
       this.history.shift();
     }
 
-    // Parse response
-    return this.parseResponse(response);
+    // Parse and scale coordinates back to real screen space
+    return this.parseResponse(response, scale);
   }
 
-  private parseResponse(response: string): {
+  private parseResponse(response: string, scaleFactor: number = 1): {
     action: InputAction | null;
     sequence: ActionSequence | null;
     description: string;
@@ -190,19 +252,35 @@ export class AIBrain {
       if (parsed.kind === 'sequence') {
         const seq: ActionSequence = {
           kind: 'sequence',
-          steps: parsed.steps || [],
+          steps: (parsed.steps || []).map((s: any) => this.scaleCoordinates(s, scaleFactor)),
           description: parsed.description || 'Multi-step sequence',
         };
         return { action: null, sequence: seq, description: seq.description, done: false };
       }
 
-      // Single action
-      const action = parsed as InputAction;
+      // Single action — scale coordinates
+      const action = this.scaleCoordinates(parsed, scaleFactor) as InputAction;
       return { action, sequence: null, description: parsed.description || 'Action', done: false };
     } catch (err) {
       return { action: null, sequence: null, description: 'Failed to parse action', done: false, error: `Parse error: ${err}\nRaw: ${response.substring(0, 200)}` };
     }
   }
+
+  /**
+   * Scale LLM coordinates back to real screen coordinates.
+   */
+  private scaleCoordinates(action: any, scaleFactor: number): any {
+    if (scaleFactor === 1) return action;
+
+    const scaled = { ...action };
+    if (typeof scaled.x === 'number') scaled.x = Math.round(scaled.x * scaleFactor);
+    if (typeof scaled.y === 'number') scaled.y = Math.round(scaled.y * scaleFactor);
+    if (typeof scaled.endX === 'number') scaled.endX = Math.round(scaled.endX * scaleFactor);
+    if (typeof scaled.endY === 'number') scaled.endY = Math.round(scaled.endY * scaleFactor);
+    return scaled;
+  }
+
+  // ─── LLM Calls ────────────────────────────────────────────────────
 
   private async callLLM(systemPrompt: string): Promise<string> {
     const { provider, apiKey, visionModel } = this.config.ai;
@@ -216,12 +294,60 @@ export class AIBrain {
     throw new Error(`Unsupported AI provider: ${provider}`);
   }
 
+  /**
+   * Text-only LLM call (no images). Used for task decomposition.
+   */
+  private async callLLMText(systemPrompt: string, userMessage: string): Promise<string> {
+    const { provider, apiKey, model } = this.config.ai;
+
+    if (provider === 'anthropic') {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 512,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }],
+        }),
+      });
+
+      const data = await response.json() as any;
+      if (data.error) throw new Error(data.error.message || 'Anthropic API error');
+      return data.content?.[0]?.text || '';
+    } else if (provider === 'openai') {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 512,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+        }),
+      });
+
+      const data = await response.json() as any;
+      return data.choices?.[0]?.message?.content || '';
+    }
+
+    throw new Error(`Unsupported AI provider: ${provider}`);
+  }
+
   private async callAnthropic(
     systemPrompt: string,
     apiKey: string,
     model: string,
   ): Promise<string> {
-    // Convert history for Anthropic format
     const messages = this.history.map(turn => ({
       role: turn.role,
       content: turn.content,
@@ -255,7 +381,6 @@ export class AIBrain {
     apiKey: string,
     model: string,
   ): Promise<string> {
-    // Convert history for OpenAI format
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
     ];

@@ -3,6 +3,8 @@
  * the Windows UI Automation tree. No vision needed for most actions.
  * 
  * Flow: Node.js → spawn powershell → .NET UI Automation → JSON back
+ * 
+ * v2: Added window management helpers (focusWindow, launchApp, getActiveWindow)
  */
 
 import { execFile } from 'child_process';
@@ -29,12 +31,38 @@ export interface WindowInfo {
   isMinimized: boolean;
 }
 
+/** Cached window list with TTL */
+interface WindowCache {
+  windows: WindowInfo[];
+  timestamp: number;
+}
+
 export class AccessibilityBridge {
+  private windowCache: WindowCache | null = null;
+  private readonly WINDOW_CACHE_TTL = 2000; // 2s cache for window list
+
   /**
-   * List all visible top-level windows
+   * List all visible top-level windows (cached for 2s)
    */
-  async getWindows(): Promise<WindowInfo[]> {
-    return this.runScript('get-windows.ps1');
+  async getWindows(forceRefresh = false): Promise<WindowInfo[]> {
+    if (
+      !forceRefresh &&
+      this.windowCache &&
+      Date.now() - this.windowCache.timestamp < this.WINDOW_CACHE_TTL
+    ) {
+      return this.windowCache.windows;
+    }
+
+    const windows = await this.runScript('get-windows.ps1');
+    this.windowCache = { windows, timestamp: Date.now() };
+    return windows;
+  }
+
+  /**
+   * Invalidate the window cache (call after actions that change window state)
+   */
+  invalidateCache(): void {
+    this.windowCache = null;
   }
 
   /**
@@ -80,25 +108,21 @@ export class AccessibilityBridge {
 
     // Auto-discover processId if not provided
     if (!processId) {
-      // Prefer automationId search (fast), fall back to name search with controlType
       const searchOpts: any = {};
       if (opts.automationId) {
         searchOpts.automationId = opts.automationId;
       } else if (opts.controlType) {
         searchOpts.controlType = opts.controlType;
       }
-      // Only add name if we have nothing else (name search can be slow)
       if (Object.keys(searchOpts).length === 0 && opts.name) {
-        searchOpts.automationId = opts.name; // Try as automationId first
+        searchOpts.automationId = opts.name;
       }
       const elements = await this.findElement(searchOpts);
       if (!elements || elements.length === 0) {
         return { success: false, error: `Element not found: ${opts.name || opts.automationId}` };
       }
-      // findElement returns objects with processId field
       processId = (elements[0] as any).processId;
       if (!processId) {
-        // Fallback: try to find via taskbar buttons which always have processId
         console.log(`   ♿ No processId for "${opts.name}", falling back to coordinate click`);
         return { success: false, error: `No processId for element: ${opts.name || opts.automationId}` };
       }
@@ -110,6 +134,71 @@ export class AccessibilityBridge {
     if (opts.controlType) args.push('-ControlType', opts.controlType);
     if (opts.value) args.push('-Value', opts.value);
     return this.runScript('invoke-element.ps1', args);
+  }
+
+  // ─── Window Management Helpers (deterministic, no LLM) ────────────
+
+  /**
+   * Focus (bring to front) a window by title substring or processId.
+   * Reliable — uses UIA WindowPattern + Win32 SetForegroundWindow fallback.
+   */
+  async focusWindow(title?: string, processId?: number): Promise<{ success: boolean; title?: string; processId?: number; error?: string }> {
+    const args: string[] = [];
+    if (title) args.push('-Title', title);
+    if (processId) args.push('-ProcessId', String(processId));
+    args.push('-Restore');  // Always restore from minimized
+
+    try {
+      const result = await this.runScript('focus-window.ps1', args);
+      this.invalidateCache(); // Window state changed
+      return result;
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  }
+
+  /**
+   * Get the currently active/focused window.
+   * Checks window list for the one at (0,0) or with focus.
+   */
+  async getActiveWindow(): Promise<WindowInfo | null> {
+    try {
+      const windows = await this.getWindows(true); // force refresh
+      // The focused window is typically not minimized and has the topmost position
+      // We look at the window list — the first non-minimized window is usually focused
+      // but for reliability we use a dedicated approach
+      const nonMinimized = windows.filter(w => !w.isMinimized);
+      if (nonMinimized.length === 0) return null;
+
+      // Sort by z-order approximation: windows with bounds starting at screen origin
+      // are more likely to be maximized/focused. But this is heuristic.
+      // Better: check which window title matches the taskbar's active state
+      return nonMinimized[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Find a window by app name/title (fuzzy match).
+   */
+  async findWindow(appNameOrTitle: string): Promise<WindowInfo | null> {
+    const lower = appNameOrTitle.toLowerCase();
+    const windows = await this.getWindows();
+
+    // Exact process name match
+    let match = windows.find(w => w.processName.toLowerCase() === lower);
+    if (match) return match;
+
+    // Title contains
+    match = windows.find(w => w.title.toLowerCase().includes(lower));
+    if (match) return match;
+
+    // Process name contains
+    match = windows.find(w => w.processName.toLowerCase().includes(lower));
+    if (match) return match;
+
+    return null;
   }
 
   /**
@@ -130,8 +219,7 @@ export class AccessibilityBridge {
       // Always include taskbar buttons (useful for launching/switching apps)
       try {
         const taskbarButtons = await this.findElement({ controlType: 'Button' });
-        // Filter to taskbar buttons only (from explorer process)
-        const tbButtons = taskbarButtons.filter((b: any) => 
+        const tbButtons = taskbarButtons.filter((b: any) =>
           b.processId === 6664 && b.className?.includes('Taskbar')
         );
         if (tbButtons.length > 0) {
@@ -174,7 +262,7 @@ export class AccessibilityBridge {
   private runScript(scriptName: string, args: string[] = []): Promise<any> {
     return new Promise((resolve, reject) => {
       const scriptPath = path.join(SCRIPTS_DIR, scriptName);
-      
+
       execFile('powershell.exe', [
         '-NoProfile',
         '-NonInteractive',

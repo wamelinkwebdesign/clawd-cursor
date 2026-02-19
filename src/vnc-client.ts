@@ -1,6 +1,11 @@
 /**
  * VNC Client — connects to a VNC server and provides
  * screen capture + mouse/keyboard input methods.
+ *
+ * v2: Smart screenshot strategy
+ * - captureScreen() returns full-resolution frames
+ * - captureForLLM() returns resized frames (1280px wide) with scaling metadata
+ * - Coordinate scaling handled transparently
  */
 
 import { EventEmitter } from 'events';
@@ -37,6 +42,9 @@ const KEY_MAP: Record<string, number> = {
   'Windows': 0xffeb,
 };
 
+/** LLM screenshot target width — halves tokens for 2560px screens */
+const LLM_TARGET_WIDTH = 1280;
+
 export class VNCClient extends EventEmitter {
   private client: any = null;
   private config: ClawdConfig;
@@ -44,6 +52,9 @@ export class VNCClient extends EventEmitter {
   private screenHeight = 0;
   private connected = false;
   private fullFrameBuffer: Buffer | null = null;
+
+  /** Scale factor: LLM coordinates × scaleFactor = real screen coordinates */
+  private scaleFactor = 1;
 
   constructor(config: ClawdConfig) {
     super();
@@ -64,8 +75,17 @@ export class VNCClient extends EventEmitter {
         this.connected = true;
         this.screenWidth = this.client.width;
         this.screenHeight = this.client.height;
+
+        // Calculate scale factor
+        if (this.screenWidth > LLM_TARGET_WIDTH) {
+          this.scaleFactor = this.screenWidth / LLM_TARGET_WIDTH;
+        } else {
+          this.scaleFactor = 1;
+        }
+
         console.log(`   Screen: ${this.screenWidth}x${this.screenHeight}`);
-        
+        console.log(`   LLM scale factor: ${this.scaleFactor.toFixed(2)}x`);
+
         // Initialize full frame buffer
         this.fullFrameBuffer = Buffer.alloc(this.screenWidth * this.screenHeight * 4, 0);
         resolve();
@@ -100,7 +120,7 @@ export class VNCClient extends EventEmitter {
   }
 
   /**
-   * Capture a screenshot. Requests a full frame update and waits for it.
+   * Capture a full-resolution screenshot (for debug / non-LLM use).
    */
   async captureScreen(): Promise<ScreenFrame> {
     if (!this.connected || !this.client) {
@@ -113,8 +133,7 @@ export class VNCClient extends EventEmitter {
     // Wait for rects to arrive
     await this.delay(800);
 
-    // Process the frame buffer into an image
-    const processed = await this.processFrame();
+    const processed = await this.processFrame(this.screenWidth, this.screenHeight);
 
     return {
       width: this.screenWidth,
@@ -125,7 +144,46 @@ export class VNCClient extends EventEmitter {
     };
   }
 
-  private async processFrame(): Promise<Buffer> {
+  /**
+   * Capture a RESIZED screenshot optimized for LLM vision.
+   * - Resized to 1280px wide (or less if screen is smaller)
+   * - Much smaller payload = fewer tokens = faster API calls
+   * - Returns scaleFactor so coordinates in AI response can be mapped back
+   */
+  async captureForLLM(): Promise<ScreenFrame & { scaleFactor: number; llmWidth: number; llmHeight: number }> {
+    if (!this.connected || !this.client) {
+      throw new Error('Not connected to VNC server');
+    }
+
+    // Request full screen update
+    this.client.requestUpdate(false, 0, 0, this.screenWidth, this.screenHeight);
+    await this.delay(800);
+
+    const llmWidth = Math.min(this.screenWidth, LLM_TARGET_WIDTH);
+    const llmHeight = Math.round(this.screenHeight / this.scaleFactor);
+
+    const processed = await this.processFrame(llmWidth, llmHeight);
+
+    return {
+      width: this.screenWidth,       // real screen width
+      height: this.screenHeight,     // real screen height
+      buffer: processed,
+      timestamp: Date.now(),
+      format: this.config.capture.format,
+      scaleFactor: this.scaleFactor,
+      llmWidth,
+      llmHeight,
+    };
+  }
+
+  /**
+   * Get the scaling factor (LLM pixels → real screen pixels)
+   */
+  getScaleFactor(): number {
+    return this.scaleFactor;
+  }
+
+  private async processFrame(targetWidth: number, targetHeight: number): Promise<Buffer> {
     if (!this.fullFrameBuffer) {
       return Buffer.alloc(0);
     }
@@ -140,13 +198,21 @@ export class VNCClient extends EventEmitter {
       rgbaBuffer[i + 2] = b;                  // B <- R
     }
 
-    const pipeline = sharp(rgbaBuffer, {
+    let pipeline = sharp(rgbaBuffer, {
       raw: {
         width: this.screenWidth,
         height: this.screenHeight,
         channels: 4,
       },
     });
+
+    // Resize if target is smaller than source
+    if (targetWidth < this.screenWidth || targetHeight < this.screenHeight) {
+      pipeline = pipeline.resize(targetWidth, targetHeight, {
+        fit: 'fill',
+        kernel: 'lanczos3',
+      });
+    }
 
     if (format === 'jpeg') {
       return pipeline.jpeg({ quality }).toBuffer();
