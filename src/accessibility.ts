@@ -80,17 +80,27 @@ export class AccessibilityBridge {
 
     // Auto-discover processId if not provided
     if (!processId) {
-      const elements = await this.findElement({
-        name: opts.name,
-        automationId: opts.automationId,
-        controlType: opts.controlType,
-      });
-      if (elements.length === 0) {
+      // Prefer automationId search (fast), fall back to name search with controlType
+      const searchOpts: any = {};
+      if (opts.automationId) {
+        searchOpts.automationId = opts.automationId;
+      } else if (opts.controlType) {
+        searchOpts.controlType = opts.controlType;
+      }
+      // Only add name if we have nothing else (name search can be slow)
+      if (Object.keys(searchOpts).length === 0 && opts.name) {
+        searchOpts.automationId = opts.name; // Try as automationId first
+      }
+      const elements = await this.findElement(searchOpts);
+      if (!elements || elements.length === 0) {
         return { success: false, error: `Element not found: ${opts.name || opts.automationId}` };
       }
+      // findElement returns objects with processId field
       processId = (elements[0] as any).processId;
       if (!processId) {
-        return { success: false, error: 'Could not determine processId for element' };
+        // Fallback: try to find via taskbar buttons which always have processId
+        console.log(`   ♿ No processId for "${opts.name}", falling back to coordinate click`);
+        return { success: false, error: `No processId for element: ${opts.name || opts.automationId}` };
       }
     }
 
