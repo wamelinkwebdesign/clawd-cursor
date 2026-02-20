@@ -851,6 +851,135 @@
         ::-webkit-scrollbar-thumb { background: var(--surface); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--surface2); }
 
+        /* Data Viz / Charts */
+        .viz-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-top: 48px;
+        }
+        .viz-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+        }
+        .viz-card h4 {
+            font-size: 0.9rem;
+            color: var(--text2);
+            margin-bottom: 24px;
+            font-weight: 600;
+        }
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 32px;
+            height: 160px;
+            margin-bottom: 16px;
+        }
+        .bar-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .bar {
+            width: 60px;
+            border-radius: 8px 8px 0 0;
+            position: relative;
+            transition: all 0.3s;
+        }
+        .bar:hover { opacity: 0.8; }
+        .bar.vision {
+            background: linear-gradient(180deg, var(--red), var(--orange));
+        }
+        .bar.clawd {
+            background: linear-gradient(180deg, var(--accent), #00c9ff);
+        }
+        .bar-label {
+            font-size: 0.75rem;
+            color: var(--text3);
+            font-weight: 500;
+        }
+        .bar-value {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+        }
+        .savings-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--accent-dim);
+            color: var(--accent2);
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+        .donut-chart {
+            width: 140px;
+            height: 140px;
+            margin: 0 auto 16px;
+            position: relative;
+        }
+        .donut-chart svg {
+            transform: rotate(-90deg);
+        }
+        .donut-chart circle {
+            fill: none;
+            stroke-width: 20;
+        }
+        .donut-bg { stroke: var(--surface); }
+        .donut-fill { stroke: var(--accent); stroke-linecap: round; }
+        .donut-center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .donut-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--accent);
+        }
+        .donut-label {
+            font-size: 0.75rem;
+            color: var(--text3);
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+        }
+        .metric-item {
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent), #00c9ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text3);
+            margin-top: 4px;
+        }
+
         /* Coming Soon Overlay */
         .coming-soon-container {
             position: relative;
@@ -1150,6 +1279,81 @@
                         <div><div class="compare-stat-val">~2s</div><div class="compare-stat-label">Per task</div></div>
                         <div><div class="compare-stat-val">500</div><div class="compare-stat-label">Tokens</div></div>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Visualization -->
+        <section class="reveal">
+            <div class="section-label">Efficiency Metrics</div>
+            <h2>80% of tasks need zero LLM calls</h2>
+            <p class="subtitle">Less tokens, lower cost, faster execution. The numbers speak for themselves.</p>
+            
+            <div class="viz-grid">
+                <!-- Token Usage Chart -->
+                <div class="viz-card">
+                    <h4>📊 Token Usage Per Task</h4>
+                    <div class="bar-chart">
+                        <div class="bar-group">
+                            <div class="bar vision" style="height: 140px;">
+                                <span class="bar-value">15,000</span>
+                            </div>
+                            <span class="bar-label">Vision-only</span>
+                        </div>
+                        <div class="bar-group">
+                            <div class="bar clawd" style="height: 12px;">
+                                <span class="bar-value">500</span>
+                            </div>
+                            <span class="bar-label">Clawd Cursor</span>
+                        </div>
+                    </div>
+                    <div class="savings-badge">💰 30x cheaper</div>
+                </div>
+
+                <!-- Zero LLM Pie Chart -->
+                <div class="viz-card">
+                    <h4>🎯 Tasks Without LLM Calls</h4>
+                    <div class="donut-chart">
+                        <svg viewBox="0 0 140 140" width="140" height="140">
+                            <circle class="donut-bg" cx="70" cy="70" r="50"/>
+                            <circle class="donut-fill" cx="70" cy="70" r="50" 
+                                    stroke-dasharray="251.2" stroke-dashoffset="50.24"/>
+                        </svg>
+                        <div class="donut-center">
+                            <span class="donut-value">80%</span>
+                            <span class="donut-label">Zero LLM</span>
+                        </div>
+                    </div>
+                    <div class="metric-row">
+                        <div class="metric-item">
+                            <div class="metric-value">80%</div>
+                            <div class="metric-label">UI Automation</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">20%</div>
+                            <div class="metric-label">Vision Fallback</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Speed Comparison -->
+                <div class="viz-card">
+                    <h4>⚡ Task Completion Time</h4>
+                    <div class="bar-chart">
+                        <div class="bar-group">
+                            <div class="bar vision" style="height: 120px;">
+                                <span class="bar-value">~12s</span>
+                            </div>
+                            <span class="bar-label">Vision-only</span>
+                        </div>
+                        <div class="bar-group">
+                            <div class="bar clawd" style="height: 20px;">
+                                <span class="bar-value">~2s</span>
+                            </div>
+                            <span class="bar-label">Clawd Cursor</span>
+                        </div>
+                    </div>
+                    <div class="savings-badge">🚀 6x faster</div>
                 </div>
             </div>
         </section>
