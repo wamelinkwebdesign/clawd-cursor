@@ -306,25 +306,42 @@ export class AIBrain {
   private async callLLMText(systemPrompt: string, userMessage: string): Promise<string> {
     const { provider, apiKey, model } = this.config.ai;
 
-    if (provider === 'anthropic') {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey!,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 512,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userMessage }],
-        }),
-      });
+    const MAX_RETRIES = 2;
 
-      const data = await response.json() as any;
-      if (data.error) throw new Error(data.error.message || 'Anthropic API error');
-      return data.content?.[0]?.text || '';
+    if (provider === 'anthropic') {
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          console.log(`   🔗 LLM text call (attempt ${attempt + 1}): model=${model}`);
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey!,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: 512,
+              system: systemPrompt,
+              messages: [{ role: 'user', content: userMessage }],
+            }),
+          });
+
+          const data = await response.json() as any;
+          if (data.error) throw new Error(data.error.message || `Anthropic API error (${response.status})`);
+          return data.content?.[0]?.text || '';
+        } catch (err) {
+          console.warn(`   ⚠️ LLM text call attempt ${attempt + 1} failed: ${err}`);
+          if (attempt < MAX_RETRIES) {
+            const backoff = 1000 * (attempt + 1);
+            console.log(`   ⏳ Retrying in ${backoff}ms...`);
+            await new Promise(r => setTimeout(r, backoff));
+          } else {
+            throw err;
+          }
+        }
+      }
+      throw new Error('LLM text call failed after retries');
     } else if (provider === 'openai') {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',

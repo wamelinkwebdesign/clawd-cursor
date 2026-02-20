@@ -58,32 +58,39 @@
 - **PowerShell** (Windows) — for accessibility features
 - **AI API Key** — Anthropic, OpenAI, or compatible provider
 
-### Option 1: Clone & Build (Recommended)
+### Option 1: One-Command Setup (Recommended — Windows)
 
-```bash
+```powershell
 # Clone the repo
 git clone https://github.com/AmrDab/clawd-cursor.git
 cd clawd-cursor
 
-# Install dependencies
-npm install
-
-# Build TypeScript
-npm run build
-
-# Configure environment
-cp .env.example .env
-# Edit .env and add your AI_API_KEY
-
-# Start the agent
-npm start -- --vnc-host localhost --vnc-port 5900 --vnc-password yourpass
+# Run setup (downloads TightVNC, installs deps, builds)
+powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-### Option 2: Global Install via NPM (Coming Soon)
+The setup script:
+- ✅ Checks Node.js version
+- ✅ Downloads & installs TightVNC Server (silently)
+- ✅ Runs `npm install`
+- ✅ Builds TypeScript
+- ✅ Creates `.env` file
+
+```powershell
+# Add your AI API key to .env, then:
+npm start -- --vnc-password yourpass
+```
+
+### Option 2: Manual Setup
 
 ```bash
-npm install -g clawd-cursor
-clawd-cursor start --vnc-password yourpass
+git clone https://github.com/AmrDab/clawd-cursor.git
+cd clawd-cursor
+npm install && npm run build
+cp .env.example .env
+# Edit .env → AI_API_KEY=sk-...
+# Install VNC server manually (TightVNC, UltraVNC, etc.)
+npm start -- --vnc-password yourpass
 ```
 
 ### Option 3: Docker (Coming Soon)

@@ -1062,16 +1062,17 @@
                     <div class="code-dot g"></div>
                     <span>terminal</span>
                 </div>
-                <pre><code><span class="c-comment"># Clone and build</span>
+                <pre><code><span class="c-comment"># Clone the repo</span>
 <span class="c-cmd">git clone</span> <span class="c-string">https://github.com/AmrDab/clawd-cursor.git</span>
 <span class="c-cmd">cd</span> clawd-cursor
-<span class="c-cmd">npm install</span> <span class="c-flag">&&</span> <span class="c-cmd">npm run build</span>
 
-<span class="c-comment"># Configure your AI API key</span>
-<span class="c-cmd">cp</span> .env.example .env
+<span class="c-comment"># One-command setup (installs TightVNC + builds project)</span>
+<span class="c-cmd">powershell</span> <span class="c-flag">-ExecutionPolicy Bypass -File</span> <span class="c-string">setup.ps1</span>
+
+<span class="c-comment"># Add your AI API key</span>
 <span class="c-comment"># Edit .env → AI_API_KEY=sk-...</span>
 
-<span class="c-comment"># Start (make sure VNC server is running)</span>
+<span class="c-comment"># Start the agent</span>
 <span class="c-cmd">npm start</span> <span class="c-flag">--</span> <span class="c-flag">--vnc-password</span> <span class="c-string">yourpass</span>
 
 <span class="c-comment"># Send a task</span>
@@ -1079,8 +1080,11 @@
   <span class="c-flag">-d</span> <span class="c-string">'{"task": "Open Chrome and go to github.com"}'</span></code></pre>
             </div>
             <div style="margin-top: 24px; color: var(--text2); font-size: 0.92rem;">
-                <strong style="color: var(--text);">Prerequisites:</strong>
-                Node.js 20+ · VNC Server · PowerShell (Windows) · AI API key
+                <strong style="color: var(--text);">The setup script handles:</strong>
+                Node.js check · TightVNC download & install · npm install · TypeScript build · .env setup
+            </div>
+            <div style="margin-top: 12px; color: var(--text3); font-size: 0.85rem;">
+                Only need: Node.js 20+ · Windows · AI API key (Anthropic or OpenAI). Everything else is automated.
             </div>
         </section>
 
