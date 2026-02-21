@@ -16,6 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { VNCClient } from './vnc-client';
+import { AccessibilityBridge } from './accessibility';
 import { SafetyLayer } from './safety';
 import { SafetyTier } from './types';
 import type { ClawdConfig, StepResult } from './types';
@@ -23,19 +24,31 @@ import type { ClawdConfig, StepResult } from './types';
 const BETA_HEADER = 'computer-use-2025-01-24';
 const MAX_ITERATIONS = 30;
 
-/** Minimal system prompt — Claude already knows how to use the computer tool */
 const SYSTEM_PROMPT = `You are Clawd Cursor, an AI desktop agent controlling a Windows 11 computer via VNC.
 
 WINDOWS 11 LAYOUT:
-- Taskbar at BOTTOM, icons CENTERED (not left-aligned)
-- Start button (Windows logo) is in the CENTER of the taskbar
-- System tray (clock, icons) is bottom-RIGHT
+- Taskbar at BOTTOM, icons CENTERED
+- Start button in CENTER of taskbar
+- System tray (clock, icons) bottom-RIGHT
+
+ACCESSIBILITY CONTEXT:
+Each tool_result includes an ACCESSIBILITY section listing open windows, UI elements, and their coordinates. USE THIS to:
+- Know which apps are open without guessing
+- Find exact element positions instead of clicking blindly
+- Identify the focused window and its UI tree
+
+EFFICIENT PATTERNS (use these, don't click around guessing):
+- Open an app: key "super", wait, type app name, key "Return"
+- Navigate to URL: key "ctrl+l" (focuses address bar), type URL, key "Return"
+- New browser tab: key "ctrl+t"
+- Switch windows: click the window listed in ACCESSIBILITY section
 
 EFFICIENCY RULES:
-- Take a screenshot ONCE at the start to see the current state
-- For drawing/dragging tasks: chain multiple drags WITHOUT screenshots between them. Only screenshot after the full shape is done to verify.
-- Only take verification screenshots after major state changes (app opened, form submitted, drawing complete) — not after every small action.
-- Be precise with coordinates. Don't repeat failed actions.`;
+- Read the ACCESSIBILITY context FIRST before deciding actions
+- Use keyboard shortcuts over mouse clicks when possible
+- For drawing: chain multiple drags WITHOUT screenshots between them
+- Only screenshot after major state changes — not after every action
+- Be decisive. Don't click randomly to "explore" — the accessibility tree tells you what's there.`;
 
 interface ToolUseBlock {
   type: 'tool_use';
@@ -69,6 +82,7 @@ export interface ComputerUseResult {
 export class ComputerUseBrain {
   private config: ClawdConfig;
   private vnc: VNCClient;
+  private a11y: AccessibilityBridge;
   private safety: SafetyLayer;
   private screenWidth: number;
   private screenHeight: number;
@@ -76,9 +90,10 @@ export class ComputerUseBrain {
   private llmHeight: number;
   private scaleFactor: number;
 
-  constructor(config: ClawdConfig, vnc: VNCClient, safety: SafetyLayer) {
+  constructor(config: ClawdConfig, vnc: VNCClient, a11y: AccessibilityBridge, safety: SafetyLayer) {
     this.config = config;
     this.vnc = vnc;
+    this.a11y = a11y;
     this.safety = safety;
 
     const screen = vnc.getScreenSize();
@@ -195,20 +210,24 @@ export class ComputerUseBrain {
         const { action } = toolUse.input;
 
         if (action === 'screenshot') {
-          // Just take a screenshot, no action to execute
+          // Just take a screenshot + a11y context, no action to execute
           console.log(`   📸 Screenshot requested`);
           const screenshot = await this.vnc.captureForLLM();
           this.saveDebugScreenshot(screenshot.buffer, debugDir, subtaskIndex, i, 'screenshot');
+          const a11yContext = await this.getA11yContext();
 
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolUse.id,
-            content: [this.screenshotToContent(screenshot)],
+            content: [
+              this.screenshotToContent(screenshot),
+              { type: 'text', text: a11yContext },
+            ],
           });
 
           steps.push({
             action: 'screenshot',
-            description: 'Captured screenshot',
+            description: 'Captured screenshot + accessibility context',
             success: true,
             timestamp: Date.now(),
           });
@@ -225,17 +244,21 @@ export class ComputerUseBrain {
             timestamp: Date.now(),
           });
 
-          // Take a screenshot after the action and send it back
+          // Take a screenshot + a11y context after the action
           await this.delay(200); // let UI settle
           const screenshot = await this.vnc.captureForLLM();
           this.saveDebugScreenshot(screenshot.buffer, debugDir, subtaskIndex, i, action);
+          const a11yContext = await this.getA11yContext();
 
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolUse.id,
             content: result.error
               ? [{ type: 'text', text: `Error: ${result.error}` }]
-              : [this.screenshotToContent(screenshot)],
+              : [
+                  this.screenshotToContent(screenshot),
+                  { type: 'text', text: a11yContext },
+                ],
           });
         }
       }
@@ -424,6 +447,19 @@ export class ComputerUseBrain {
   }
 
   // ─── Helpers ────────────────────────────────────────────────────
+
+  /** Get accessibility context — windows, elements, focused app */
+  private async getA11yContext(): Promise<string> {
+    try {
+      // Get active window to include its UI tree
+      const activeWindow = await this.a11y.getActiveWindow();
+      const processId = activeWindow?.processId;
+      const context = await this.a11y.getScreenContext(processId);
+      return `\nACCESSIBILITY:\n${context}`;
+    } catch {
+      return '\nACCESSIBILITY: (unavailable)';
+    }
+  }
 
   /** Scale LLM coordinates to real screen coordinates */
   private scale(coords: [number, number]): [number, number] {

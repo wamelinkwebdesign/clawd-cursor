@@ -70,8 +70,8 @@ export class Agent {
 
     // Initialize Computer Use if Anthropic provider
     if (ComputerUseBrain.isSupported(this.config)) {
-      this.computerUse = new ComputerUseBrain(this.config, this.vnc, this.safety);
-      console.log(`🖥️  Computer Use API enabled (Anthropic native tool)`);
+      this.computerUse = new ComputerUseBrain(this.config, this.vnc, this.a11y, this.safety);
+      console.log(`🖥️  Computer Use API enabled (Anthropic native tool + accessibility)`);
     }
 
     const size = this.vnc.getScreenSize();
