@@ -63,6 +63,8 @@ RELIABLE PATTERNS (use these, they work consistently):
 - Switch apps: key "alt+Tab" or click window from ACCESSIBILITY WINDOWS list
 - Select all text: key "ctrl+a"
 - Copy/paste: key "ctrl+c" / key "ctrl+v"
+- Calculator: USE KEYBOARD to type numbers and operators (type "255*38=" instead of clicking buttons one by one)
+- Any input field: prefer typing over clicking buttons when possible — it's faster and more reliable
 
 MISTAKES TO AVOID:
 - Do NOT use search engines to navigate to known URLs — type the URL directly
@@ -70,7 +72,10 @@ MISTAKES TO AVOID:
 - Do NOT click randomly hoping to find something — read the accessibility tree
 - Do NOT take a screenshot after every single action — only after state-changing actions
 - Do NOT keep retrying the same click coordinates — if it didn't work, the element might have moved
+- Do NOT click on the very edge of the screen (y=720 is the bottom) — taskbar buttons need precise coordinates from accessibility data
+- Do NOT click individual calculator/numpad buttons — type the numbers instead
 - If a page is loading, use "wait" action (1-3 seconds) instead of clicking again
+- To switch to an already-open app: use Start menu search (most reliable) or alt+Tab — clicking taskbar icons by pixel is unreliable
 
 RECOVERY:
 - Unexpected popup/ad: press Escape, or find close button in accessibility tree
