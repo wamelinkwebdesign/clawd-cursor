@@ -1,6 +1,6 @@
 {
   "name": "clawd-cursor",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AI Desktop Agent over VNC — your AI connects to your desktop like a remote user",
   "main": "dist/index.js",
   "bin": {

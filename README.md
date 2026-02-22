@@ -15,7 +15,11 @@
 
 ---
 
-## What's New in v0.3.0
+## What's New in v0.3.1
+
+**SKILL.md security hardening** — added YAML frontmatter, explicit credential declarations, privacy disclosure, and security considerations for ClaWHub publishing.
+
+## v0.3.0
 
 **Performance optimizations across the pipeline** — ~70% faster task execution, 90% fewer redundant LLM calls on static screens.
 
