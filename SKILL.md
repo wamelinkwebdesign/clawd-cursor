@@ -12,7 +12,7 @@ description: >
 
 # Clawd Cursor
 
-Desktop automation skill for OpenClaw. Controls any GUI application through VNC.
+**One skill, multiple endpoints.** Instead of integrating dozens of APIs, give your agent a screen. Gmail, Slack, Jira, Figma — if you can click it, your agent can too. Desktop automation skill for OpenClaw via VNC.
 
 ## Required Credentials
 
