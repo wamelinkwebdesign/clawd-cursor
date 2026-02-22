@@ -1,6 +1,6 @@
 ---
 name: clawd-cursor
-version: 0.3.3
+version: 0.3.4
 description: >
   AI desktop agent that controls Windows/Mac via VNC. Gives your agent eyes and full cursor control —
   screen capture, mouse clicks, keyboard input, drag operations, and GUI automation.
@@ -8,6 +8,22 @@ description: >
   Requires: VNC server with password, AI API key (Anthropic or OpenAI) for vision features.
   Installs: Node.js dependencies via npm, optionally TightVNC via setup script.
   Privacy note: screenshots are sent to AI provider APIs (Anthropic/OpenAI) for vision processing.
+metadata:
+  openclaw:
+    requires:
+      env:
+        - VNC_PASSWORD
+        - AI_API_KEY
+      bins:
+        - node
+        - npm
+    primaryEnv: VNC_PASSWORD
+    install:
+      - git clone https://github.com/AmrDab/clawd-cursor.git
+      - cd clawd-cursor && npm install && npx tsc
+    privacy:
+      - Screenshots sent to external AI provider (Anthropic/OpenAI)
+      - VNC_PASSWORD grants full desktop GUI control
 ---
 
 # Clawd Cursor
