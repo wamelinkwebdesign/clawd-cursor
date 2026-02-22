@@ -181,24 +181,44 @@ try {
     exit 1
 }
 
+# ─── Auto-generate VNC password if needed ──────────────────────
+if (-not $VncPassword) {
+    $VncPassword = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+    Write-Host "  [KEY] Generated VNC password: $VncPassword" -ForegroundColor Cyan
+}
+
+# ─── Write .env automatically ──────────────────────────────────
+if (-not (Test-Path ".env")) {
+    Copy-Item ".env.example" ".env" -ErrorAction SilentlyContinue
+}
+
+if (Test-Path ".env") {
+    $envContent = Get-Content ".env" -Raw
+    if ($envContent -match 'VNC_PASSWORD=your_vnc_password|VNC_PASSWORD=$') {
+        $envContent = $envContent -replace 'VNC_PASSWORD=your_vnc_password', "VNC_PASSWORD=$VncPassword"
+        $envContent = $envContent -replace 'VNC_PASSWORD=$', "VNC_PASSWORD=$VncPassword"
+        Set-Content ".env" $envContent -NoNewline
+        Write-Host "  [OK] VNC password written to .env" -ForegroundColor Green
+    } elseif ($envContent -notmatch 'VNC_PASSWORD=') {
+        Add-Content ".env" "`nVNC_PASSWORD=$VncPassword"
+        Write-Host "  [OK] VNC password added to .env" -ForegroundColor Green
+    } else {
+        Write-Host "  [OK] .env already has a VNC password" -ForegroundColor Green
+    }
+} else {
+    Set-Content ".env" "VNC_PASSWORD=$VncPassword`nAI_API_KEY=your_api_key_here`n"
+    Write-Host "  [OK] Created .env with VNC password" -ForegroundColor Green
+}
+
 # ─── Done ──────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  [OK] Setup complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor White
-
-if (-not (Test-Path ".env")) {
-    Copy-Item ".env.example" ".env" -ErrorAction SilentlyContinue
-    Write-Host "    1. Edit .env and add your AI_API_KEY" -ForegroundColor Gray
-} else {
-    Write-Host "    1. Make sure .env has your AI_API_KEY" -ForegroundColor Gray
-}
-
-if ($VncPassword) {
-    Write-Host "    2. Run: npm start -- --vnc-password $VncPassword" -ForegroundColor Cyan
-} else {
-    Write-Host "    2. Run: npm start -- --vnc-password <your-vnc-password>" -ForegroundColor Cyan
-}
+Write-Host "    1. Edit .env and add your AI_API_KEY (if not already set)" -ForegroundColor Gray
+Write-Host "    2. Run: npm start" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  VNC password is auto-configured — no need to pass it manually." -ForegroundColor Gray
 Write-Host ""
 Write-Host "  [*] Happy clawing!" -ForegroundColor Cyan
 Write-Host ""
