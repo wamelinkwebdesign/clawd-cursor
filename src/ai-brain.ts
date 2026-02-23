@@ -12,7 +12,7 @@
 import * as crypto from 'crypto';
 import type { ClawdConfig, InputAction, ActionSequence, ScreenFrame } from './types';
 
-const SYSTEM_PROMPT = `You are Clawd Cursor, an AI desktop agent controlling a Windows 11 computer via VNC.
+const SYSTEM_PROMPT = `You are Clawd Cursor, an AI desktop agent controlling a Windows 11 computer via native screen capture and input.
 Real screen resolution: {REAL_WIDTH}x{REAL_HEIGHT}. Screenshot shown at: {LLM_WIDTH}x{LLM_HEIGHT} (scale factor: {SCALE}x).
 
 IMPORTANT: All coordinates you provide should be in the SCREENSHOT coordinate space ({LLM_WIDTH}x{LLM_HEIGHT}).

@@ -7,7 +7,7 @@
  *    b. If parser returns null AND API key is set → LLM decomposition
  *    c. If parser returns null AND no API key → error: task too complex
  * 2. For each subtask:
- *    a. Try Action Router (accessibility + VNC, NO LLM) ← handles 80%+ of tasks
+ *    a. Try Action Router (accessibility + native desktop, NO LLM) ← handles 80%+ of tasks
  *    b. If router can't handle it AND API key set → LLM vision fallback
  *    c. If router can't handle it AND no API key → skip subtask
  * 3. Track what approach worked for each subtask
@@ -34,7 +34,7 @@ const MAX_SIMILAR_ACTION = 3;
 const MAX_LLM_FALLBACK_STEPS = 10;
 
 export class Agent {
-  private vnc: NativeDesktop;
+  private desktop: NativeDesktop;
   private brain: AIBrain;
   private parser: LocalTaskParser;
   private safety: SafetyLayer;
@@ -52,12 +52,12 @@ export class Agent {
 
   constructor(config: ClawdConfig) {
     this.config = config;
-    this.vnc = new NativeDesktop(config);
+    this.desktop = new NativeDesktop(config);
     this.brain = new AIBrain(config);
     this.parser = new LocalTaskParser();
     this.safety = new SafetyLayer(config);
     this.a11y = new AccessibilityBridge();
-    this.router = new ActionRouter(this.a11y, this.vnc);
+    this.router = new ActionRouter(this.a11y, this.desktop);
     this.hasApiKey = !!(config.ai.apiKey && config.ai.apiKey.length > 0);
 
     if (!this.hasApiKey) {
@@ -67,15 +67,15 @@ export class Agent {
   }
 
   async connect(): Promise<void> {
-    await this.vnc.connect();
+    await this.desktop.connect();
 
     // Initialize Computer Use if Anthropic provider
     if (ComputerUseBrain.isSupported(this.config)) {
-      this.computerUse = new ComputerUseBrain(this.config, this.vnc, this.a11y, this.safety);
+      this.computerUse = new ComputerUseBrain(this.config, this.desktop, this.a11y, this.safety);
       console.log(`🖥️  Computer Use API enabled (Anthropic native tool + accessibility)`);
     }
 
-    const size = this.vnc.getScreenSize();
+    const size = this.desktop.getScreenSize();
     this.brain.setScreenSize(size.width, size.height);
   }
 
@@ -300,7 +300,7 @@ export class Agent {
       if (j > 0) await this.delay(1500); // longer pause between LLM retries to let UI settle
 
       const [screenshot, a11yContext] = await Promise.all([
-        this.vnc.captureForLLM(),
+        this.desktop.captureForLLM(),
         this.a11y.getScreenContext().catch(() => undefined as string | undefined),
       ]);
 
@@ -434,9 +434,9 @@ export class Agent {
     if (action.kind.startsWith('a11y_')) {
       await this.executeA11yAction(action as A11yAction);
     } else if ('x' in action) {
-      await this.vnc.executeMouseAction(action as any);
+      await this.desktop.executeMouseAction(action as any);
     } else {
-      await this.vnc.executeKeyboardAction(action as any);
+      await this.desktop.executeKeyboardAction(action as any);
     }
   }
 
@@ -456,7 +456,7 @@ export class Agent {
   }
 
   disconnect(): void {
-    this.vnc.disconnect();
+    this.desktop.disconnect();
   }
 
   private async executeA11yAction(action: A11yAction): Promise<void> {

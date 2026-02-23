@@ -413,11 +413,11 @@ export class NativeDesktop extends EventEmitter {
   // ─── Private helpers ──────────────────────────────────────────────
 
   /**
-   * Map a VNC-style button number to nut-js Button enum.
-   * VNC: 1=left, 2=middle, 4=right
+   * Map a button number to nut-js Button enum.
+   * 1=left, 2=middle, 4=right
    */
-  private mapButton(vncButton: number): Button {
-    switch (vncButton) {
+  private mapButton(buttonId: number): Button {
+    switch (buttonId) {
       case 1: return Button.LEFT;
       case 2: return Button.MIDDLE;
       case 4: return Button.RIGHT;

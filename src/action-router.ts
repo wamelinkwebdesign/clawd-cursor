@@ -1,6 +1,6 @@
 /**
  * Action Router — intercepts common tasks and handles them
- * WITHOUT any LLM call using accessibility + VNC.
+ * WITHOUT any LLM call using accessibility + native desktop.
  *
  * This is the core optimization: most desktop tasks follow predictable
  * patterns that don't need vision AI to execute.
@@ -58,11 +58,11 @@ const READY_SETTLE_MS = 500;      // extra ms after window appears (let UI rende
 
 export class ActionRouter {
   private a11y: AccessibilityBridge;
-  private vnc: NativeDesktop;
+  private desktop: NativeDesktop;
 
-  constructor(a11y: AccessibilityBridge, vnc: NativeDesktop) {
+  constructor(a11y: AccessibilityBridge, desktop: NativeDesktop) {
     this.a11y = a11y;
-    this.vnc = vnc;
+    this.desktop = desktop;
   }
 
   /**
@@ -138,7 +138,7 @@ export class ActionRouter {
 
     for (const [pattern, combo] of Object.entries(shortcutMap)) {
       if (task === pattern || task === `press ${pattern}`) {
-        await this.vnc.keyPress(combo);
+        await this.desktop.keyPress(combo);
         return { handled: true, description: `Pressed ${combo} (${pattern})` };
       }
     }
@@ -213,18 +213,18 @@ export class ActionRouter {
     try {
       if (PLATFORM === 'darwin') {
         // macOS: Use Spotlight (Cmd+Space)
-        await this.vnc.keyPress('Super+ '); // Cmd+Space
+        await this.desktop.keyPress('Super+ '); // Cmd+Space
         await this.delay(400);
-        await this.vnc.typeText(searchTerm);
+        await this.desktop.typeText(searchTerm);
         await this.delay(600);
-        await this.vnc.keyPress('Return');
+        await this.desktop.keyPress('Return');
       } else {
         // Windows: Use Start Menu (Win key)
-        await this.vnc.keyPress('Super');
+        await this.desktop.keyPress('Super');
         await this.delay(600);
-        await this.vnc.typeText(searchTerm);
+        await this.desktop.typeText(searchTerm);
         await this.delay(800);
-        await this.vnc.keyPress('Return');
+        await this.desktop.keyPress('Return');
       }
 
       // Poll until a NEW window appears (or timeout)
@@ -299,7 +299,7 @@ export class ActionRouter {
 
   private async handleType(text: string): Promise<RouteResult> {
     try {
-      await this.vnc.typeText(text);
+      await this.desktop.typeText(text);
       return {
         handled: true,
         description: `Typed "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`,
@@ -340,11 +340,11 @@ export class ActionRouter {
       }
 
       // Ctrl+L to focus address bar, then type URL
-      await this.vnc.keyPress('ctrl+l');
+      await this.desktop.keyPress('ctrl+l');
       await this.delay(300);
-      await this.vnc.typeText(fullUrl);
+      await this.desktop.typeText(fullUrl);
       await this.delay(100);
-      await this.vnc.keyPress('Return');
+      await this.desktop.keyPress('Return');
 
       return {
         handled: true,
@@ -387,7 +387,7 @@ export class ActionRouter {
           // If a11y click failed but we have coordinates, click there
           if ((result as any).clickPoint) {
             const pt = (result as any).clickPoint;
-            await this.vnc.mouseClick(pt.x, pt.y);
+            await this.desktop.mouseClick(pt.x, pt.y);
             return {
               handled: true,
               description: `Clicked "${elementName}" at (${pt.x}, ${pt.y})`,
@@ -399,7 +399,7 @@ export class ActionRouter {
         if (el.bounds && el.bounds.width > 0) {
           const cx = el.bounds.x + Math.floor(el.bounds.width / 2);
           const cy = el.bounds.y + Math.floor(el.bounds.height / 2);
-          await this.vnc.mouseClick(cx, cy);
+          await this.desktop.mouseClick(cx, cy);
           return {
             handled: true,
             description: `Clicked "${elementName}" at center (${cx}, ${cy})`,
@@ -457,9 +457,9 @@ export class ActionRouter {
       if (focusResult.handled) {
         await this.delay(200);
         if (PLATFORM === 'darwin') {
-          await this.vnc.keyPress('Super+q'); // Cmd+Q on macOS
+          await this.desktop.keyPress('Super+q'); // Cmd+Q on macOS
         } else {
-          await this.vnc.keyPress('alt+F4');
+          await this.desktop.keyPress('alt+F4');
         }
         return {
           handled: true,
@@ -484,9 +484,9 @@ export class ActionRouter {
       await this.delay(200);
 
       if (action === 'minimize') {
-        await this.vnc.keyPress('Super+Down');
+        await this.desktop.keyPress('Super+Down');
       } else {
-        await this.vnc.keyPress('Super+Up');
+        await this.desktop.keyPress('Super+Up');
       }
 
       return {
@@ -528,7 +528,7 @@ export class ActionRouter {
     const mapped = keyMap[normalized] || keyDesc;
 
     try {
-      await this.vnc.keyPress(mapped);
+      await this.desktop.keyPress(mapped);
       return {
         handled: true,
         description: `Pressed ${mapped}`,

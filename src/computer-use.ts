@@ -8,7 +8,7 @@
  * The adapter handles:
  *  - Tool declaration with screen dimensions
  *  - Screenshot capture and submission as tool_results
- *  - Action execution via VNC client
+ *  - Action execution via NativeDesktop
  *  - Coordinate scaling (LLM space ↔ real screen)
  *  - The full agent loop (screenshot → action → screenshot → ...)
  */
@@ -24,7 +24,7 @@ import type { ClawdConfig, StepResult } from './types';
 const BETA_HEADER = 'computer-use-2025-01-24';
 const MAX_ITERATIONS = 30;
 
-const SYSTEM_PROMPT = `You are Clawd Cursor, an AI desktop agent controlling a Windows 11 computer via VNC.
+const SYSTEM_PROMPT = `You are Clawd Cursor, an AI desktop agent controlling a Windows 11 computer via native screen capture and input.
 You MUST complete the user's task reliably. Think step by step, verify your progress, and recover from mistakes.
 
 WINDOWS 11 LAYOUT:
@@ -124,7 +124,7 @@ export interface ComputerUseResult {
 
 export class ComputerUseBrain {
   private config: ClawdConfig;
-  private vnc: NativeDesktop;
+  private desktop: NativeDesktop;
   private a11y: AccessibilityBridge;
   private safety: SafetyLayer;
   private screenWidth: number;
@@ -136,13 +136,13 @@ export class ComputerUseBrain {
   private lastMouseX = 0;
   private lastMouseY = 0;
 
-  constructor(config: ClawdConfig, vnc: NativeDesktop, a11y: AccessibilityBridge, safety: SafetyLayer) {
+  constructor(config: ClawdConfig, desktop: NativeDesktop, a11y: AccessibilityBridge, safety: SafetyLayer) {
     this.config = config;
-    this.vnc = vnc;
+    this.desktop = desktop;
     this.a11y = a11y;
     this.safety = safety;
 
-    const screen = vnc.getScreenSize();
+    const screen = desktop.getScreenSize();
     this.screenWidth = screen.width;
     this.screenHeight = screen.height;
 
@@ -264,7 +264,7 @@ export class ComputerUseBrain {
         if (action === 'screenshot') {
           // Always provide screenshot for explicit screenshot requests
           console.log(`   📸 Screenshot requested`);
-          const screenshot = await this.vnc.captureForLLM();
+          const screenshot = await this.desktop.captureForLLM();
           this.saveDebugScreenshot(screenshot.buffer, debugDir, subtaskIndex, i, 'screenshot');
           const a11yContext = await this.getA11yContext();
 
@@ -289,7 +289,7 @@ export class ComputerUseBrain {
           // Release any held modifier keys after non-hold actions
           if (toolUse.input.action !== 'hold_key' && this.heldKeys.length > 0) {
             for (const hk of this.heldKeys) {
-              await this.vnc.keyUp(hk);
+              await this.desktop.keyUp(hk);
             }
             this.heldKeys = [];
           }
@@ -316,7 +316,7 @@ export class ComputerUseBrain {
 
           if (result.error) {
             // Always send full context on error so Claude can recover
-            const screenshot = await this.vnc.captureForLLM();
+            const screenshot = await this.desktop.captureForLLM();
             this.saveDebugScreenshot(screenshot.buffer, debugDir, subtaskIndex, i, action);
             const a11yContext = await this.getA11yContext();
             toolResults.push({
@@ -336,7 +336,7 @@ export class ComputerUseBrain {
             const delayMs = isAppLaunch ? 1000 : isNavigation ? 800 : isTyping ? 100 : 300;
             await this.delay(delayMs);
 
-            const screenshot = await this.vnc.captureForLLM();
+            const screenshot = await this.desktop.captureForLLM();
             this.saveDebugScreenshot(screenshot.buffer, debugDir, subtaskIndex, i, action);
             const a11yContext = await this.getA11yContext();
             const verifyHint = this.getVerificationHint(action, toolUse.input);
@@ -455,44 +455,44 @@ export class ComputerUseBrain {
       switch (action) {
         case 'left_click': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseClick(x, y);
+          await this.desktop.mouseClick(x, y);
           this.lastMouseX = x; this.lastMouseY = y;
           return { description: `Click at (${x}, ${y})` };
         }
 
         case 'right_click': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseRightClick(x, y);
+          await this.desktop.mouseRightClick(x, y);
           return { description: `Right click at (${x}, ${y})` };
         }
 
         case 'double_click': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseDoubleClick(x, y);
+          await this.desktop.mouseDoubleClick(x, y);
           return { description: `Double click at (${x}, ${y})` };
         }
 
         case 'triple_click': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseClick(x, y);
+          await this.desktop.mouseClick(x, y);
           await this.delay(50);
-          await this.vnc.mouseClick(x, y);
+          await this.desktop.mouseClick(x, y);
           await this.delay(50);
-          await this.vnc.mouseClick(x, y);
+          await this.desktop.mouseClick(x, y);
           return { description: `Triple click at (${x}, ${y})` };
         }
 
         case 'middle_click': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseDown(x, y, 2); // button 2 = middle
+          await this.desktop.mouseDown(x, y, 2); // button 2 = middle
           await this.delay(50);
-          await this.vnc.mouseUp(x, y);
+          await this.desktop.mouseUp(x, y);
           return { description: `Middle click at (${x}, ${y})` };
         }
 
         case 'mouse_move': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseMove(x, y);
+          await this.desktop.mouseMove(x, y);
           return { description: `Mouse move to (${x}, ${y})` };
         }
 
@@ -502,42 +502,42 @@ export class ComputerUseBrain {
           }
           const [sx, sy] = this.scale(start_coordinate);
           const [ex, ey] = this.scale(coordinate);
-          await this.vnc.mouseDrag(sx, sy, ex, ey);
+          await this.desktop.mouseDrag(sx, sy, ex, ey);
           return { description: `Drag (${sx},${sy}) → (${ex},${ey})` };
         }
 
         case 'left_mouse_down': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseDown(x, y);
+          await this.desktop.mouseDown(x, y);
           return { description: `Mouse down at (${x}, ${y})` };
         }
 
         case 'left_mouse_up': {
           const [x, y] = this.scale(coordinate!);
-          await this.vnc.mouseUp(x, y);
+          await this.desktop.mouseUp(x, y);
           return { description: `Mouse up at (${x}, ${y})` };
         }
 
         case 'type': {
           if (!text) return { description: 'Type: empty text', error: 'No text provided' };
-          await this.vnc.typeText(text);
+          await this.desktop.typeText(text);
           return { description: `Typed "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"` };
         }
 
         case 'key': {
           if (!text) return { description: 'Key press: empty', error: 'No key provided' };
-          // Map Anthropic key names to VNC key names
-          const vncKey = this.mapKeyName(text);
-          await this.vnc.keyPress(vncKey);
+          // Map Anthropic key names to nut-js key names
+          const mappedKey = this.mapKeyName(text);
+          await this.desktop.keyPress(mappedKey);
           return { description: `Key press: ${text}` };
         }
 
         case 'hold_key': {
           // Hold a modifier key down — released after next non-hold action
           const holdKey = key || text || '';
-          const vncKey = this.mapKeyName(holdKey);
-          await this.vnc.keyDown(vncKey);
-          this.heldKeys.push(vncKey);
+          const mappedKey = this.mapKeyName(holdKey);
+          await this.desktop.keyDown(mappedKey);
+          this.heldKeys.push(mappedKey);
           return { description: `Holding key: ${holdKey}` };
         }
 
@@ -552,7 +552,7 @@ export class ComputerUseBrain {
           const dir = toolUse.input.scroll_direction || 'down';
           const amount = toolUse.input.scroll_amount || 3;
           const delta = (dir === 'up' || dir === 'left') ? -amount : amount;
-          await this.vnc.mouseScroll(x, y, delta);
+          await this.desktop.mouseScroll(x, y, delta);
           return { description: `Scroll ${dir} by ${amount} at (${x}, ${y})` };
         }
 
@@ -632,7 +632,7 @@ export class ComputerUseBrain {
     ];
   }
 
-  /** Map Anthropic key names to VNC key names */
+  /** Map Anthropic key names to nut-js key names */
   private mapKeyName(key: string): string {
     const keyMap: Record<string, string> = {
       'return': 'Return',
