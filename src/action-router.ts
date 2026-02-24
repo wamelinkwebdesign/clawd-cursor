@@ -214,7 +214,7 @@ export class ActionRouter {
     try {
       if (PLATFORM === 'darwin') {
         // macOS: Use Spotlight (Cmd+Space)
-        await this.desktop.keyPress('Super+ '); // Cmd+Space
+        await this.desktop.keyPress('Super+Space'); // Cmd+Space
         await this.delay(400);
         await this.desktop.typeText(searchTerm);
         await this.delay(600);

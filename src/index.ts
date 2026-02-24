@@ -10,6 +10,7 @@ import { Command } from 'commander';
 import { Agent } from './agent';
 import { createServer } from './server';
 import { DEFAULT_CONFIG } from './types';
+import { PROVIDERS } from './providers';
 import type { ClawdConfig } from './types';
 import dotenv from 'dotenv';
 
@@ -40,8 +41,8 @@ program
       ai: {
         provider: opts.provider as any,
         apiKey: opts.apiKey || process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
-        model: opts.model || DEFAULT_CONFIG.ai.model,
-        visionModel: opts.model || DEFAULT_CONFIG.ai.visionModel,
+        model: opts.model || PROVIDERS[opts.provider]?.textModel || DEFAULT_CONFIG.ai.model,
+        visionModel: opts.model || PROVIDERS[opts.provider]?.visionModel || DEFAULT_CONFIG.ai.visionModel,
       },
       debug: opts.debug || false,
     };

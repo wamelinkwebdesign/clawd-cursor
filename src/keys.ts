@@ -44,6 +44,10 @@ const KEY_ALIASES: Record<string, string> = {
   'super_l': 'Super',
   'win': 'Super',
   'windows': 'Super',
+  // macOS command key aliases
+  'cmd': 'Super',
+  'command': 'Super',
+  'command_l': 'Super',
 
   // Function keys
   'f1': 'F1', 'f2': 'F2', 'f3': 'F3', 'f4': 'F4',
